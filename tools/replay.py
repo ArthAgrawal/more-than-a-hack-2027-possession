@@ -1,8 +1,11 @@
 """Watch the model at work: a top-down replay of the tracking with the model's live call.
 
-    python tools/replay.py --start 54000 --seconds 40          # writes cache/replay.mp4
+    python tools/replay.py --time 36:00 --seconds 40 --live    # plays in a window
+    python tools/replay.py --time 36:00 --seconds 40           # writes cache/replay.mp4
 
-Optional extra, not part of the submission pipeline. Needs matplotlib and ffmpeg on the PATH.
+--time is the video clock (mm:ss); --start takes a video frame instead (25 per second).
+Optional extra, not part of the submission pipeline. Needs matplotlib; saving an .mp4 also needs
+ffmpeg on the PATH (--live does not).
 The output goes to cache/ (git-ignored): a rendered replay is derived from the licensed tracking
 data, so keep it private -- do not commit or publish it.
 """
@@ -13,7 +16,8 @@ import sys
 
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")
+if "--live" not in sys.argv:
+    matplotlib.use("Agg")  # no window needed when writing a file
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
@@ -45,11 +49,16 @@ def draw_pitch(ax):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--time", help="video clock to start at, mm:ss (e.g. 36:00)")
     ap.add_argument("--start", type=int, default=54000, help="first video frame")
+    ap.add_argument("--live", action="store_true", help="play in a window instead of saving")
     ap.add_argument("--seconds", type=float, default=40)
     ap.add_argument("--out", default=os.path.join(ROOT, "cache", "replay.mp4"))
     args = ap.parse_args()
 
+    if args.time:
+        minutes, seconds = args.time.split(":")
+        args.start = int((int(minutes) * 60 + float(seconds)) * FPS)
     data = load()
     labels, _ = possession(data, graded_mask())
     start, stop = args.start, args.start + int(args.seconds * FPS)
@@ -84,13 +93,7 @@ def main():
                                  (("Barça", HOME), ("Athletic", AWAY), ("dead ball", DEAD))):
         fig.text(x, 0.035, name, color=colour, fontsize=12, weight="bold")
 
-    w, h = fig.canvas.get_width_height()
-    ffmpeg = subprocess.Popen(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba",
-         "-s", "%dx%d" % (w, h), "-r", str(FPS), "-i", "-", "-c:v", "libx264",
-         "-preset", "veryfast", "-pix_fmt", "yuv420p", "-crf", "23", args.out],
-        stdin=subprocess.PIPE)
-    for f in range(start, stop):
+    def update(f):
         px, py = data["px"][f], data["py"][f]
         ok = np.isfinite(px)
         home.set_offsets(np.c_[px[ok & (team == 0)], py[ok & (team == 0)]])
@@ -107,6 +110,22 @@ def main():
         sec = f / FPS
         clock.set_text("video %02d:%05.2f" % (sec // 60, sec % 60))
         head.set_xdata([f - start, f - start])
+
+    if args.live:
+        from matplotlib.animation import FuncAnimation
+        _anim = FuncAnimation(fig, update, frames=range(start, stop), interval=1000 / FPS,
+                              repeat=False)
+        plt.show()
+        return
+
+    w, h = fig.canvas.get_width_height()
+    ffmpeg = subprocess.Popen(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba",
+         "-s", "%dx%d" % (w, h), "-r", str(FPS), "-i", "-", "-c:v", "libx264",
+         "-preset", "veryfast", "-pix_fmt", "yuv420p", "-crf", "23", args.out],
+        stdin=subprocess.PIPE)
+    for f in range(start, stop):
+        update(f)
         fig.canvas.draw()
         ffmpeg.stdin.write(fig.canvas.buffer_rgba().tobytes())
     ffmpeg.stdin.close()
