@@ -1,17 +1,21 @@
 # Our submission — ball possession by evidence decoding
 
-> **Run:** `python -m mtah.run --out evaluation/results/submission.csv` (numpy + pandas, ~5 s
+> **Run:** `python -m mtah.run --out evaluation/results/submission.csv` (numpy + pandas only, ~6 s
 > after the first run caches the tracking). Method, calibration and rule compliance:
 > **[TECHNICAL_REPORT.md](TECHNICAL_REPORT.md)**.
 
 | Path | What it is |
 |---|---|
 | `mtah/load.py` | reads the raw ATD tracking into arrays (cached in `cache/`, git-ignored) |
-| `mtah/possession.py` | the method: ball-in-play mask + two-state Viterbi possession decoder |
+| `mtah/possession.py` | ball-in-play mask, possession evidence and the two-state Viterbi decoder |
+| `mtah/features.py` | per-frame features for the learned evidence (mirrored for both teams) |
+| `mtah/evidence_model.npz` + `mtah/gbtrees.py` | the trained tree model, evaluated in plain numpy |
 | `mtah/run.py` | writes the submission CSV and prints label-free sanity statistics |
-| `mtah/external.py` | reference possessions for Metrica's public sample games (calibration only) |
-| `calibration/calibrate.py` | reproduces the parameter choice on those external games |
-| `tools/replay.py` | optional: replay any moment with the model's live call, e.g. `python tools/replay.py --time 36:00 --seconds 40 --live` (needs matplotlib; saving an .mp4 instead also needs ffmpeg) |
+| `mtah/external.py` | reference possessions + tracking degradation for Metrica's public sample games |
+| `calibration/train_evidence.py` | retrains the model on the three external games (never on the provided match) |
+| `calibration/cross_validate.py` | held-out comparison: learned evidence vs the distance rule |
+| `calibration/calibrate.py` | noise-profile fit and the distance-rule parameter grid |
+| `tools/replay.py` | optional: replay any moment with the model's live call, e.g. `python tools/replay.py --time 36:00 --seconds 40 --live` |
 
 Everything below this line is the organisers' original README.
 

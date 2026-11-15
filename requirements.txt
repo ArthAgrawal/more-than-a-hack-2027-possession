@@ -6,5 +6,6 @@
 #
 # Optional tooling -- the ATD loader and anything that opens the video -- lives in
 # requirements-starter.txt.
-numpy
-pandas
+# Pinned to the versions the submission was produced and verified with.
+numpy==2.5.3
+pandas==3.0.5

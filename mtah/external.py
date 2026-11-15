@@ -88,3 +88,78 @@ def degrade(data, sigma, seed=0, tau=25):
         z = z / z.std() * sigma
         out[key] = data[key] + z
     return out
+
+
+def drop_players(data, keep=0.93, seed=0, mean_len=250):
+    """Blank out player tracks in random stretches so that about `keep` of player-frames remain,
+    like the provided tracking (about 10.2 of 11 players per team visible). No labels involved."""
+    rng = np.random.default_rng(seed + 100)
+    px, py = data["px"].copy(), data["py"].copy()
+    n, k = px.shape
+    for j in range(k):
+        t = 0
+        while t < n:
+            t += int(rng.exponential(mean_len * keep / (1 - keep)))
+            gap = int(rng.exponential(mean_len))
+            px[t:t + gap, j] = np.nan
+            py[t:t + gap, j] = np.nan
+            t += gap
+    out = dict(data)
+    out["px"], out["py"] = px, py
+    return out
+
+
+def _subtype_string(sub):
+    if sub is None:
+        return "nan"
+    if isinstance(sub, dict):
+        return sub["name"]
+    return "-".join(s["name"] for s in sub)
+
+
+def load_game3():
+    """Sample game 3: FIFA EPTS tracking (player set changes with substitutions) + JSON events,
+    converted to the same structures as games 1 and 2."""
+    import json
+    import xml.etree.ElementTree as ET
+    base = os.path.join(EXT, "data", "Sample_Game_3", "Sample_Game_3_")
+    root = ET.parse(base + "metadata.xml").getroot()
+    team_ids = [t.get("id") for t in root.iter("Team")]
+    team_of = {p.get("id"): team_ids.index(p.get("teamId")) for p in root.iter("Player")}
+    chan = {c.get("id"): c.get("playerId") for c in root.iter("PlayerChannel")}
+    players = sorted(team_of)
+    slot = {pid: i for i, pid in enumerate(players)}
+    specs = []
+    for spec in root.iter("DataFormatSpecification"):
+        refs = [r.get("playerChannelId") for r in spec.iter("PlayerChannelRef")]
+        order = [slot[chan[r]] for r in refs[::2]]  # x then y per player
+        specs.append((int(spec.get("startFrame")), int(spec.get("endFrame")), np.array(order)))
+    with open(base + "tracking.txt") as fh:
+        lines = fh.read().splitlines()
+    n = max(int(l.split(":", 1)[0]) for l in lines)
+    px = np.full((n, len(players)), np.nan)
+    py = np.full((n, len(players)), np.nan)
+    bx = np.full(n, np.nan)
+    by = np.full(n, np.nan)
+    for line in lines:
+        fr, pl, ball = line.split(":")
+        f = int(fr)
+        order = next(o for s, e, o in specs if s <= f <= e)
+        vals = np.array([v.split(",") for v in pl.split(";")], dtype=float)
+        px[f - 1, order] = vals[:, 0] * L
+        py[f - 1, order] = vals[:, 1] * W
+        b = ball.split(",")
+        bx[f - 1], by[f - 1] = float(b[0]) * L, float(b[1]) * W
+    team = np.array([team_of[p] for p in players], np.int8)
+    sp = np.full_like(px, np.nan)
+    sp[1:-1] = np.hypot(px[2:] - px[:-2], py[2:] - py[:-2]) * 12.5
+    ev = json.load(open(base + "events.json"))["data"]
+    rows = [{"Team": "Home" if e["team"]["id"] == team_ids[0] else "Away",
+             "Type": e["type"]["name"], "Subtype": _subtype_string(e["subtypes"]),
+             "Start Frame": e["start"]["frame"], "End Frame": e["end"]["frame"] or e["start"]["frame"]}
+            for e in ev]
+    return dict(px=px, py=py, ps=sp, bx=bx, by=by, team=team), pd.DataFrame(rows)
+
+
+def load_any(g):
+    return load_game3() if g == 3 else load_game(g)

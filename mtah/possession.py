@@ -5,7 +5,8 @@ Two stages, both deterministic, no learning and no labels from the provided matc
   1. alive_mask()  -- is the ball in play? Built from the ball's visibility, the ball leaving the
                       pitch, a motionless ball awaiting a restart, and the players' running speed.
   2. possession()  -- within each stretch of live play, which team has the ball? Per-frame
-                      evidence (which team is clearly closest to the ball) is decoded with a
+                      evidence (by default learned on other matches, see learned_evidence;
+                      or the hand-made "clearly closest team" rule) is decoded with a
                       two-state Viterbi that charges a fixed penalty per change of possession.
                       This keeps each possession in one piece: a deflection or a ball flying
                       past an opponent cannot flip the label, while sustained control does.
@@ -61,6 +62,13 @@ P = dict(
     fast_ball=20.0,
     # Cost of one change of possession, in frames of clear evidence (~1.2 s).
     lam=30.0,
+    # ---------------- learned evidence (default) ----------------
+    # "learned": per-frame log-odds from gradient-boosted trees trained on other matches
+    # (calibration/train_evidence.py); "distance": the hand-made rule above.
+    evidence="learned",
+    # Switch penalty for the learned evidence, in log-likelihood units. Middle of the plateau
+    # (24-32) in leave-one-game-out tests on the external games.
+    lam_learned=28.0,
 )
 # ctrl_radius, ev_scale, fast_ball and lam were chosen by grid search on the external games
 # after degrading their clean ball positions to match the noise profile of the provided
@@ -212,12 +220,34 @@ def viterbi2(s, lam):
     return out
 
 
+def learned_evidence(data):
+    """Per-frame half log-odds that home has the ball, from the exported tree model.
+
+    Each frame is scored from both sides (as is, and with home/away swapped) and the two
+    probabilities averaged, so the evidence is exactly symmetric between the teams.
+    """
+    from mtah import features, gbtrees
+    model = gbtrees.load()
+    X = features.build(data)
+    ok = np.isfinite(X[:, 0])
+    s = np.zeros(len(X))
+    if ok.any():
+        p_home = gbtrees.predict_proba(model, X[ok])
+        p_home_swapped = 1.0 - gbtrees.predict_proba(model, features.swap(X[ok]))
+        p = np.clip((p_home + p_home_swapped) / 2, 1e-4, 1 - 1e-4)
+        s[ok] = 0.5 * np.log(p / (1 - p))
+    return s
+
+
 def possession(data, graded, p=P, alive=None):
     """Return (labels 0/1/2 per frame, alive mask)."""
     if alive is None:
         alive = alive_mask(data, graded, p)
-    s = evidence(data, p)
+    if p.get("evidence") == "learned":
+        s, lam = learned_evidence(data), p["lam_learned"]
+    else:
+        s, lam = evidence(data, p), p["lam"]
     lab = np.full(len(s), D, np.int8)
     for a, b in zip(*_runs(alive)):
-        lab[a:b] = viterbi2(s[a:b], p["lam"])
+        lab[a:b] = viterbi2(s[a:b], lam)
     return lab, alive

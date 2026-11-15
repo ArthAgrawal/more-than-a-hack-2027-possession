@@ -1,0 +1,4 @@
+# Only for retraining / re-checking the evidence model (calibration/*.py), not for the pipeline.
+scikit-learn==1.9.1
+numpy==2.5.3
+pandas==3.0.5

@@ -63,13 +63,14 @@ def main():
     rows = []
     keys = list(GRID)
     for values in itertools.product(*GRID.values()):
-        p = dict(pos.P, **dict(zip(keys, values)))
+        p = dict(pos.P, evidence="distance", **dict(zip(keys, values)))
         rows.append((*score(p), *values))
     rows.sort(reverse=True)
     print("\nspellF1  macroF1  " + "  ".join(keys))
     for r in rows[:10]:
         print("%.4f   %.4f   " % r[:2] + "  ".join("%g" % v for v in r[2:]))
-    print("\nchosen (mtah/possession.py P): spellF1 %.4f macroF1 %.4f" % tuple(score(pos.P)))
+    print("\nchosen distance-rule setting: spellF1 %.4f macroF1 %.4f"
+          % tuple(score(dict(pos.P, evidence="distance"))))
 
 
 if __name__ == "__main__":
