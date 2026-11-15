@@ -1,6 +1,6 @@
 # More than a Hack 2027 — Phase 1: Ball possession from automatic tracking
 
-**Team:** _<team name>_ — _<members>_
+**Team:** La Masia — Arth Agrawal, Adya Goenka, Sanika Gumaste, Monish Nambirajan Sunitha
 **Match:** FC Barcelona (H) vs Athletic Club (A), tactical camera, 199,319 frames at 25 fps
 **Output:** one label per frame — `H`, `A`, `D` (dead ball), and `X` only outside the graded halves
 **Reproduce:** `python -m mtah.run --out evaluation/results/submission.csv` (numpy + pandas only)
