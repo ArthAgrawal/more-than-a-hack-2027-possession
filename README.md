@@ -11,6 +11,7 @@
 | `mtah/run.py` | writes the submission CSV and prints label-free sanity statistics |
 | `mtah/external.py` | reference possessions for Metrica's public sample games (calibration only) |
 | `calibration/calibrate.py` | reproduces the parameter choice on those external games |
+| `tools/replay.py` | optional: renders a top-down replay with the model's live call (needs matplotlib + ffmpeg; output stays in git-ignored `cache/`) |
 
 Everything below this line is the organisers' original README.
 
